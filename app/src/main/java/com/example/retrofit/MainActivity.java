@@ -1,16 +1,25 @@
 package com.example.retrofit;
 
 import androidx.appcompat.app.AppCompatActivity;
+
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.appcompat.widget.SearchView;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+
 import android.app.SearchManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.retrofit.api.ApiClient;
@@ -25,7 +34,7 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements  SwipeRefreshLayout.OnRefreshListener{
 
     public static final String API_KEY = "3266a60b3abb442b8d0b3cbc43b66441";
     private RecyclerView recyclerView;
@@ -33,23 +42,45 @@ public class MainActivity extends AppCompatActivity {
     private List<Article> articles = new ArrayList<>();
     private Adapter adapter;
     private String TAG = MainActivity.class.getSimpleName();
+    private SwipeRefreshLayout swipeRefreshLayout;
+    private TextView headline;
+    private RelativeLayout errorLayout;
+    private ImageView errorImage;
+    private TextView errorTitle, errormessage;
+    private Button btnRetry;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        swipeRefreshLayout = findViewById(R.id.swipe_Refresh_layout);
+        swipeRefreshLayout.setOnRefreshListener(this);
+        swipeRefreshLayout.setColorSchemeResources(R.color.colorAccent);
+
+        headline = findViewById(R.id.headline);
         recyclerView = findViewById(R.id.recyclerView);
         layoutManager = new LinearLayoutManager(MainActivity.this);
         recyclerView.setLayoutManager(layoutManager);
         recyclerView.setItemAnimator(new DefaultItemAnimator());
         recyclerView.setNestedScrollingEnabled(false);
 
-        loadJson("");
+        onLoadingSwipeRefresh("");
+
+        errorLayout = findViewById(R.id.errorLayout);
+        errorImage = findViewById(R.id.errorImage);
+        errorTitle = findViewById(R.id.errorTitle);
+        errormessage = findViewById(R.id.errormessage);
+        btnRetry = findViewById(R.id.retry);
 
     }
 
     public void loadJson(final String keyword) {
+        // error handler
+        errorLayout.setVisibility(View.GONE);
+
+        swipeRefreshLayout.setRefreshing(true);
+        headline.setVisibility(View.GONE);
         ApiInterface apiInterface = ApiClient.getApiClient().create(ApiInterface.class);
 
         String country = Utils.getCountry();
@@ -66,6 +97,7 @@ public class MainActivity extends AppCompatActivity {
         call.enqueue(new Callback<News>() {
             @Override
             public void onResponse(Call<News> call, Response<News> response) {
+                headline.setVisibility(View.VISIBLE);
                 if (response.isSuccessful() && response.body().getArticle() != null) {
 
                     if (!articles.isEmpty()) {
@@ -77,14 +109,53 @@ public class MainActivity extends AppCompatActivity {
                     recyclerView.setAdapter(adapter);
                     adapter.notifyDataSetChanged();
 
+                    initListener();
+
+                    swipeRefreshLayout.setRefreshing(false);
+
                 } else {
-                    Toast.makeText(MainActivity.this, "Data kosong", Toast.LENGTH_SHORT).show();
+                    swipeRefreshLayout.setRefreshing(false);
+                    String errorCode;
+                    switch(response.code()) {
+                        case 404:
+                            errorCode = "Error 404";
+                            break;
+                        case  500:
+                            errorCode = "Errir 500";
+                            break;
+                        default:
+                            errorCode = "Error";
+                            break;
+                    }
+                    showErrorMessage(R.drawable.no_result, "Hasil tidak ditemukan", "Harap ulangi kembali" + errorCode);
+
                 }
             }
 
             @Override
             public void onFailure(Call<News> call, Throwable t) {
+                swipeRefreshLayout.setRefreshing(false);
+                showErrorMessage(R.drawable.no_result, "Request error", "Harap ulangi kembali" + t.toString());
+            }
+        });
+    }
 
+    private void initListener() {
+        adapter.setOnItemClickListener(new Adapter.OnItemClickListener() {
+            @Override
+            public void onItemClick(View view, int position) {
+                ImageView imageView = view.findViewById(R.id.img);
+                Intent intent = new Intent(MainActivity.this, NewsDetailActivity.class);
+
+                Article article = articles.get(position);
+                intent.putExtra("url", article.getUrl());
+                intent.putExtra("title", article.getTitle());
+                intent.putExtra("img", article.getUrlToImage());
+                intent.putExtra("date", article.getPublishedAt());
+                intent.putExtra("source", article.getSource().getName());
+                intent.putExtra("author", article.getAuthor());
+
+                startActivity(intent);
             }
         });
     }
@@ -104,7 +175,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean onQueryTextSubmit(String query) {
                 if (query.length() > 2){
-                    loadJson(query);
+                   onLoadingSwipeRefresh(query);
                 }
                 else {
                     Toast.makeText(MainActivity.this, "Type more than two letters!", Toast.LENGTH_SHORT).show();
@@ -123,4 +194,37 @@ public class MainActivity extends AppCompatActivity {
         return true;
 
     }
+
+    @Override
+    public void onRefresh() {
+        loadJson("");
+    }
+
+    private void onLoadingSwipeRefresh(final String keyword) {
+            swipeRefreshLayout.post(new Runnable() {
+                @Override
+                public void run() {
+                    loadJson(keyword);
+                }
+            });
+    }
+
+    private void showErrorMessage(int imageView, String message, String title) {
+       if (errorLayout.getVisibility() == View.GONE) {
+           errorLayout.setVisibility(View.VISIBLE);
+       }
+
+       errorImage.setImageResource(imageView);
+       errorTitle.setText(title);
+       errormessage.setText(message);
+
+       btnRetry.setOnClickListener(new View.OnClickListener() {
+           @Override
+           public void onClick(View view) {
+               onLoadingSwipeRefresh("");
+           }
+       });
+
+    }
+
 }
