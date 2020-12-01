@@ -1,10 +1,10 @@
 Aplikasi berita
 
 <div align="center">
-    <img src="brt1.jpg" width="400px"</img> 
+    <img src="brt1.png" width="400px"</img> 
 </div>
 
 
 <div align="center">
-    <img src="brt2.jpg" width="400px"</img> 
+    <img src="brt2.png" width="400px"</img> 
 </div>
